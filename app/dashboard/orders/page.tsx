@@ -25,6 +25,7 @@ import { API_ENDPOINTS } from "@/lib/config"
 
 interface Order {
   id: number
+  order_id: string
   user_id: number
   username: string
   filial_id: number
@@ -85,6 +86,7 @@ export default function OrdersPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState("all")
+  const [dateFilter, setDateFilter] = useState("all")
   const router = useRouter()
 
   const navigation = [
@@ -107,34 +109,99 @@ export default function OrdersPage() {
 
     setCurrentUser(JSON.parse(userData))
     fetchData(token)
+
+    // Har 10 soniyada ma'lumotlarni yangilash
+    const interval = setInterval(() => {
+      if (token) {
+        fetchData(token)
+      }
+    }, 10000) // 10 soniya
+
+    // Cleanup function - komponent unmount bo'lganda interval ni tozalash
+    return () => {
+      clearInterval(interval)
+    }
   }, [router])
 
   const fetchData = async (token: string) => {
     try {
-      const [ordersRes, productsRes, branchesRes] = await Promise.all([
-        fetch(API_ENDPOINTS.orderslist, { headers: { Authorization: `Bearer ${token}` } }), // Updated to use orderslist endpoint
-        fetch(API_ENDPOINTS.products, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(API_ENDPOINTS.filials, { headers: { Authorization: `Bearer ${token}` } }),
-      ])
+      // Faqat buyurtmalarni yangilash, mahsulotlar va filiallar o'zgarmasligi uchun
+      const ordersRes = await fetch(API_ENDPOINTS.orderslist, { 
+        headers: { Authorization: `Bearer ${token}` } 
+      })
 
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json()
-        setOrders(ordersData.data || [])
+        setOrders(Array.isArray(ordersData.data) ? ordersData.data : [])
       }
 
-      if (productsRes.ok) {
-        const productsData = await productsRes.json()
-        setProducts(productsData.data || [])
-      }
+      // Mahsulotlar va filiallar faqat birinchi marta yuklansin
+      if (products.length === 0 || branches.length === 0) {
+        const [productsRes, branchesRes] = await Promise.all([
+          fetch(API_ENDPOINTS.products, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(API_ENDPOINTS.filials, { headers: { Authorization: `Bearer ${token}` } }),
+        ])
 
-      if (branchesRes.ok) {
-        const branchesData = await branchesRes.json()
-        setBranches(branchesData.data)
+        if (productsRes.ok) {
+          const productsData = await productsRes.json()
+          const productsArray = productsData.data || productsData || []
+          setProducts(Array.isArray(productsArray) ? productsArray : [])
+        }
+
+        if (branchesRes.ok) {
+          const branchesData = await branchesRes.json()
+          setBranches(Array.isArray(branchesData.data) ? branchesData.data : [])
+        }
       }
     } catch (error) {
       console.error("Data fetch error:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Order ID dan sana olish funksiyasi
+  const getDateFromOrderId = (orderId: string) => {
+    if (!orderId || orderId.length < 8) return null
+    
+    try {
+      const parts = orderId.split('-')
+      if (parts.length >= 3) {
+        const year = parseInt(`20${parts[0]}`) // 25 -> 2025
+        const month = parseInt(parts[1]) - 1 // JavaScript da oylar 0 dan boshlanadi
+        const day = parseInt(parts[2])
+        
+        return new Date(year, month, day)
+      }
+    } catch (error) {
+      console.error('Order ID dan sana olishda xatolik:', error)
+    }
+    
+    return null
+  }
+
+  // Sana filtri uchun funksiya
+  const isInDateRange = (orderDate: Date, filterType: string) => {
+    const today = new Date()
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    
+    switch (filterType) {
+      case "today":
+        const orderStart = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate())
+        return orderStart.getTime() === todayStart.getTime()
+      
+      case "week":
+        const weekAgo = new Date(todayStart)
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        return orderDate >= weekAgo && orderDate <= today
+      
+      case "month":
+        const monthAgo = new Date(todayStart)
+        monthAgo.setMonth(monthAgo.getMonth() - 1)
+        return orderDate >= monthAgo && orderDate <= today
+      
+      default:
+        return true
     }
   }
 
@@ -219,14 +286,32 @@ export default function OrdersPage() {
             Bekor qilindi
           </Badge>
         )
+      case "print_error":
+        return (
+          <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600">
+            Print xatosi
+          </Badge>
+        )
       default:
         return <Badge variant="outline">{status}</Badge>
     }
   }
 
   const filteredOrders = orders.filter((order) => {
-    if (statusFilter === "all") return true
-    return order.status === statusFilter
+    // Status filtrini tekshirish
+    if (statusFilter !== "all" && order.status !== statusFilter) {
+      return false
+    }
+    
+    // Sana filtrini tekshirish
+    if (dateFilter !== "all") {
+      const orderDate = getDateFromOrderId(order.order_id)
+      if (!orderDate || !isInDateRange(orderDate, dateFilter)) {
+        return false
+      }
+    }
+    
+    return true
   })
 
   const handleLogout = () => {
@@ -374,37 +459,44 @@ export default function OrdersPage() {
                     <div className="space-y-2">
                       <Label>Mahsulotlar</Label>
                       <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-4">
-                        {products.map((product) => (
-                          <div key={product.id} className="flex items-center justify-between p-2 border rounded">
-                            <div>
-                              <p className="font-medium">{product.name}</p>
-                              <p className="text-sm text-muted-foreground">{product.category_name}</p>
+                        {/* Mahsulotlar massivini tekshirish */}
+                        {Array.isArray(products) && products.length > 0 ? (
+                          products.map((product) => (
+                            <div key={product.id} className="flex items-center justify-between p-2 border rounded">
+                              <div>
+                                <p className="font-medium">{product.name}</p>
+                                <p className="text-sm text-muted-foreground">{product.category_name}</p>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleProductCountChange(product.id, (selectedProducts[product.id] || 0) - 1)
+                                  }
+                                >
+                                  -
+                                </Button>
+                                <span className="w-8 text-center">{selectedProducts[product.id] || 0}</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleProductCountChange(product.id, (selectedProducts[product.id] || 0) + 1)
+                                  }
+                                >
+                                  +
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  handleProductCountChange(product.id, (selectedProducts[product.id] || 0) - 1)
-                                }
-                              >
-                                -
-                              </Button>
-                              <span className="w-8 text-center">{selectedProducts[product.id] || 0}</span>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  handleProductCountChange(product.id, (selectedProducts[product.id] || 0) + 1)
-                                }
-                              >
-                                +
-                              </Button>
-                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center text-muted-foreground py-4">
+                            Mahsulotlar yuklanmoqda yoki mavjud emas
                           </div>
-                        ))}
+                        )}
                       </div>
                     </div>
 
@@ -439,19 +531,42 @@ export default function OrdersPage() {
 
           {/* Filters */}
           <div className="mb-6">
-            <div className="flex items-center space-x-4">
-              <Label htmlFor="status-filter">Status bo'yicha filtr:</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Barcha buyurtmalar</SelectItem>
-                  <SelectItem value="sent_to_printer">Yuborilgan</SelectItem>
-                  <SelectItem value="completed">Tugallangan</SelectItem>
-                  <SelectItem value="cancelled">Bekor qilingan</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-center space-x-4 flex-wrap gap-4">
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="status-filter">Status:</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Barcha statuslar</SelectItem>
+                    <SelectItem value="sent_to_printer">Yuborilgan</SelectItem>
+                    <SelectItem value="completed">Tugallangan</SelectItem>
+                    <SelectItem value="cancelled">Bekor qilingan</SelectItem>
+                    <SelectItem value="print_error">Print xatosi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="date-filter">Sana:</Label>
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Barcha sanalar</SelectItem>
+                    <SelectItem value="today">Bugun</SelectItem>
+                    <SelectItem value="week">So'nggi hafta</SelectItem>
+                    <SelectItem value="month">So'nggi oy</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Natija haqida ma'lumot */}
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <span>Jami: {filteredOrders.length} ta buyurtma</span>
+              </div>
             </div>
           </div>
 
@@ -517,9 +632,9 @@ export default function OrdersPage() {
                 <ShoppingCart className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium mb-2">Buyurtmalar topilmadi</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  {statusFilter === "all"
+                  {statusFilter === "all" && dateFilter === "all"
                     ? "Hozircha hech qanday buyurtma yo'q."
-                    : "Tanlangan status bo'yicha buyurtmalar topilmadi."}
+                    : "Tanlangan filtrlar bo'yicha buyurtmalar topilmadi."}
                 </p>
                 <Button onClick={() => setDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />

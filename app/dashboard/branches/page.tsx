@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,7 +20,6 @@ import {
 import { Coffee, MapPin, Plus, Building2, Loader2, Menu, Edit, Trash2, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { API_ENDPOINTS } from "@/lib/config"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface Branch {
   id: number
@@ -55,6 +53,7 @@ export default function BranchesPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [isDeleting, setIsDeleting] = useState<number | null>(null)
+  const [activeDropdown, setActiveDropdown] = useState<number | null>(null)
   const router = useRouter()
 
   const navigation = [
@@ -79,6 +78,21 @@ export default function BranchesPage() {
     fetchBranches(token)
   }, [router])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeDropdown !== null) {
+        const target = event.target as Element
+        if (!target.closest('.dropdown-container')) {
+          setActiveDropdown(null)
+        }
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [activeDropdown])
+
   const fetchBranches = async (token: string) => {
     try {
       const response = await fetch(API_ENDPOINTS.filials, {
@@ -93,6 +107,7 @@ export default function BranchesPage() {
       }
     } catch (error) {
       console.error("Branches fetch error:", error)
+      setError("Filiallarni yuklashda xatolik yuz berdi")
     } finally {
       setLoading(false)
     }
@@ -165,6 +180,7 @@ export default function BranchesPage() {
         setSuccess("Filial muvaffaqiyatli yangilandi")
         setEditDialogOpen(false)
         setEditingBranch(null)
+        setActiveDropdown(null)
       } else {
         setError(data.message || "Xatolik yuz berdi")
       }
@@ -175,10 +191,8 @@ export default function BranchesPage() {
     }
   }
 
-  const handleDeleteBranch = async (branchId: number) => {
-    if (!confirm("Haqiqatan ham bu filialni o'chirmoqchimisiz?")) return
-
-    setIsDeleting(branchId)
+  const handleDeleteBranch = async (branch: Branch) => {
+    setIsDeleting(branch.id)
     setError("")
     setSuccess("")
 
@@ -186,7 +200,7 @@ export default function BranchesPage() {
     if (!token) return
 
     try {
-      const response = await fetch(API_ENDPOINTS.filial(branchId), {
+      const response = await fetch(API_ENDPOINTS.filial(branch.id), {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -196,8 +210,9 @@ export default function BranchesPage() {
       const data = await response.json()
 
       if (data.success) {
-        setBranches(branches.filter((branch) => branch.id !== branchId))
+        setBranches(branches.filter((b) => b.id !== branch.id))
         setSuccess("Filial muvaffaqiyatli o'chirildi")
+        setActiveDropdown(null)
       } else {
         setError(data.message || "Xatolik yuz berdi")
       }
@@ -206,6 +221,21 @@ export default function BranchesPage() {
     } finally {
       setIsDeleting(null)
     }
+  }
+
+  const openEditDialog = (branch: Branch) => {
+    setEditingBranch(branch)
+    setEditDialogOpen(true)
+    setActiveDropdown(null)
+  }
+
+  const openDeleteDialog = (branch: Branch) => {
+    handleDeleteBranch(branch)
+    setActiveDropdown(null)
+  }
+
+  const toggleDropdown = (branchId: number) => {
+    setActiveDropdown(activeDropdown === branchId ? null : branchId)
   }
 
   const handleLogout = () => {
@@ -371,6 +401,12 @@ export default function BranchesPage() {
             </Alert>
           )}
 
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {branches.map((branch) => (
               <Card key={branch.id} className="hover:shadow-md transition-shadow">
@@ -386,36 +422,43 @@ export default function BranchesPage() {
                       </div>
                     </div>
                     {user?.is_admin && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditingBranch(branch)
-                              setEditDialogOpen(true)
-                            }}
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Tahrirlash
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteBranch(branch.id)}
-                            className="text-destructive"
-                            disabled={isDeleting === branch.id}
-                          >
-                            {isDeleting === branch.id ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4 mr-2" />
-                            )}
-                            O'chirish
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="relative dropdown-container">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleDropdown(branch.id)}
+                          className="p-1 hover:bg-accent"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                        {activeDropdown === branch.id && (
+                          <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-md shadow-lg z-50">
+                            <div className="py-1">
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start text-left h-auto py-2 px-4 text-sm hover:bg-accent hover:text-accent-foreground"
+                                onClick={() => openEditDialog(branch)}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Tahrirlash
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start text-left h-auto py-2 px-4 text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                                onClick={() => openDeleteDialog(branch)}
+                                disabled={isDeleting === branch.id}
+                              >
+                                {isDeleting === branch.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                )}
+                                O'chirish
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </CardHeader>
@@ -448,66 +491,66 @@ export default function BranchesPage() {
               </CardContent>
             </Card>
           )}
-
-          {/* Edit dialog */}
-          <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Filialni tahrirlash</DialogTitle>
-                <DialogDescription>Filial ma'lumotlarini yangilang</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleEditBranch} className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-name">Filial nomi</Label>
-                  <Input
-                    id="edit-name"
-                    placeholder="Masalan: Yunusobod filiali"
-                    value={editingBranch?.name || ""}
-                    onChange={(e) =>
-                      setEditingBranch(editingBranch ? { ...editingBranch, name: e.target.value } : null)
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-location">Manzil</Label>
-                  <Input
-                    id="edit-location"
-                    placeholder="Masalan: Yunusobod tumani"
-                    value={editingBranch?.location || ""}
-                    onChange={(e) =>
-                      setEditingBranch(editingBranch ? { ...editingBranch, location: e.target.value } : null)
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
-                    Bekor qilish
-                  </Button>
-                  <Button type="submit" disabled={isUpdating}>
-                    {isUpdating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Yangilanmoqda...
-                      </>
-                    ) : (
-                      "Yangilash"
-                    )}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
         </main>
+
+        {/* Edit dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Filialni tahrirlash</DialogTitle>
+              <DialogDescription>Filial ma'lumotlarini yangilang</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditBranch} className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Filial nomi</Label>
+                <Input
+                  id="edit-name"
+                  placeholder="Masalan: Yunusobod filiali"
+                  value={editingBranch?.name || ""}
+                  onChange={(e) =>
+                    setEditingBranch(editingBranch ? { ...editingBranch, name: e.target.value } : null)
+                  }
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-location">Manzil</Label>
+                <Input
+                  id="edit-location"
+                  placeholder="Masalan: Yunusobod tumani"
+                  value={editingBranch?.location || ""}
+                  onChange={(e) =>
+                    setEditingBranch(editingBranch ? { ...editingBranch, location: e.target.value } : null)
+                  }
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+                  Bekor qilish
+                </Button>
+                <Button type="submit" disabled={isUpdating}>
+                  {isUpdating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Yangilanmoqda...
+                    </>
+                  ) : (
+                    "Yangilash"
+                  )}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

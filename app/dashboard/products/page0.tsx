@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,20 +31,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  Coffee,
-  Package,
-  Plus,
-  Building2,
-  MapPin,
-  Users,
-  ShoppingCart,
-  Loader2,
-  Menu,
-  Search,
-  MoreVertical,
-  Edit,
-  Trash2,
-} from "lucide-react"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Coffee, Package, Plus, Building2, MapPin, Users, ShoppingCart, Loader2, Menu, Search, MoreVertical, Edit, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { API_ENDPOINTS } from "@/lib/config"
 
@@ -96,6 +89,7 @@ export default function ProductsPage() {
   const [success, setSuccess] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  
   // Edit states
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -103,12 +97,11 @@ export default function ProductsPage() {
   const [editProductCategoryId, setEditProductCategoryId] = useState("")
   const [editProductFilials, setEditProductFilials] = useState<number[]>([])
   const [isEditingProduct, setIsEditingProduct] = useState(false)
+  
   // Delete states
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null)
   const [isDeletingProduct, setIsDeletingProduct] = useState(false)
-  // Dropdown state
-  const [activeDropdown, setActiveDropdown] = useState<number | null>(null)
 
   const router = useRouter()
 
@@ -133,21 +126,6 @@ export default function ProductsPage() {
     setUser(JSON.parse(userData))
     fetchData(token)
   }, [router])
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (activeDropdown !== null) {
-        const target = event.target as Element
-        if (!target.closest('.dropdown-container')) {
-          setActiveDropdown(null)
-        }
-      }
-    }
-
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [activeDropdown])
 
   const fetchData = async (token: string) => {
     try {
@@ -180,7 +158,6 @@ export default function ProductsPage() {
       setProducts([])
       setCategories([])
       setBranches([])
-      setError("Ma'lumotlarni yuklashda xatolik yuz berdi")
     } finally {
       setLoading(false)
     }
@@ -213,10 +190,7 @@ export default function ProductsPage() {
 
       if (data.success) {
         const categoryName = categories.find((c) => c.id === Number.parseInt(newProduct.category_id))?.name
-        const filialNames = branches
-          .filter((b) => newProduct.filials.includes(b.id))
-          .map((b) => b.name)
-        setProducts([...products, { ...data.data, category_name: categoryName, filial_names: filialNames }])
+        setProducts([...products, { ...data.data, category_name: categoryName }])
         setNewProduct({ name: "", category_id: "", filials: [] })
         setSuccess("Mahsulot muvaffaqiyatli qo'shildi")
         setDialogOpen(false)
@@ -237,7 +211,6 @@ export default function ProductsPage() {
     setEditProductFilials(product.filials)
     setEditDialogOpen(true)
     setError("")
-    setActiveDropdown(null)
   }
 
   const handleEditProduct = async (e: React.FormEvent) => {
@@ -268,17 +241,13 @@ export default function ProductsPage() {
 
       if (data.success) {
         const categoryName = categories.find((c) => c.id === Number.parseInt(editProductCategoryId))?.name
-        const filialNames = branches
-          .filter((b) => editProductFilials.includes(b.id))
-          .map((b) => b.name)
         setProducts(products.map(product => 
           product.id === editingProduct.id 
-            ? { ...product, name: editProductName, category_id: Number.parseInt(editProductCategoryId), category_name: categoryName, filials: editProductFilials, filial_names: filialNames }
+            ? { ...product, name: editProductName, category_id: Number.parseInt(editProductCategoryId), category_name: categoryName, filials: editProductFilials }
             : product
         ))
         setSuccess("Mahsulot muvaffaqiyatli yangilandi")
         setEditDialogOpen(false)
-        setActiveDropdown(null)
       } else {
         setError(data.message || "Xatolik yuz berdi")
       }
@@ -292,7 +261,6 @@ export default function ProductsPage() {
   const openDeleteDialog = (product: Product) => {
     setDeletingProduct(product)
     setDeleteDialogOpen(true)
-    setActiveDropdown(null)
   }
 
   const handleDeleteProduct = async () => {
@@ -317,7 +285,6 @@ export default function ProductsPage() {
         setProducts(products.filter(product => product.id !== deletingProduct.id))
         setSuccess("Mahsulot muvaffaqiyatli o'chirildi")
         setDeleteDialogOpen(false)
-        setActiveDropdown(null)
       } else {
         setError(data.message || "Xatolik yuz berdi")
       }
@@ -349,10 +316,6 @@ export default function ProductsPage() {
     localStorage.removeItem("token")
     localStorage.removeItem("user")
     router.push("/login")
-  }
-
-  const toggleDropdown = (productId: number) => {
-    setActiveDropdown(activeDropdown === productId ? null : productId)
   }
 
   const filteredProducts = products.filter((product) => {
@@ -449,93 +412,92 @@ export default function ProductsPage() {
             </div>
             <div className="flex items-center space-x-4">
               {user?.is_admin && <Badge variant="secondary">Admin</Badge>}
-              {user?.is_admin && (
-                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Yangi mahsulot
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Yangi mahsulot qo'shish</DialogTitle>
-                      <DialogDescription>Yangi mahsulot ma'lumotlarini kiriting</DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleAddProduct} className="space-y-4">
-                      {error && (
-                        <Alert variant="destructive">
-                          <AlertDescription>{error}</AlertDescription>
-                        </Alert>
-                      )}
+              
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Yangi mahsulot
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Yangi mahsulot qo'shish</DialogTitle>
+                    <DialogDescription>Yangi mahsulot ma'lumotlarini kiriting</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleAddProduct} className="space-y-4">
+                    {error && (
+                      <Alert variant="destructive">
+                        <AlertDescription>{error}</AlertDescription>
+                      </Alert>
+                    )}
 
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Mahsulot nomi</Label>
-                        <Input
-                          id="name"
-                          placeholder="Masalan: Amerikano"
-                          value={newProduct.name}
-                          onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                          required
-                        />
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Mahsulot nomi</Label>
+                      <Input
+                        id="name"
+                        placeholder="Masalan: Amerikano"
+                        value={newProduct.name}
+                        onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                        required
+                      />
+                    </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="category">Kategoriya</Label>
-                        <Select
-                          value={newProduct.category_id}
-                          onValueChange={(value) => setNewProduct({ ...newProduct, category_id: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Kategoriyani tanlang" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((category) => (
-                              <SelectItem key={category.id} value={category.id.toString()}>
-                                {category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Filiallar</Label>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {branches.map((branch) => (
-                            <div key={branch.id} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`branch-${branch.id}`}
-                                checked={newProduct.filials.includes(branch.id)}
-                                onCheckedChange={() => handleBranchToggle(branch.id)}
-                              />
-                              <Label htmlFor={`branch-${branch.id}`} className="text-sm">
-                                {branch.name}
-                              </Label>
-                            </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="category">Kategoriya</Label>
+                      <Select
+                        value={newProduct.category_id}
+                        onValueChange={(value) => setNewProduct({ ...newProduct, category_id: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Kategoriyani tanlang" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id.toString()}>
+                              {category.name}
+                            </SelectItem>
                           ))}
-                        </div>
-                      </div>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                      <div className="flex justify-end space-x-2">
-                        <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                          Bekor qilish
-                        </Button>
-                        <Button type="submit" disabled={isAddingProduct}>
-                          {isAddingProduct ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Qo'shilmoqda...
-                            </>
-                          ) : (
-                            "Qo'shish"
-                          )}
-                        </Button>
+                    <div className="space-y-2">
+                      <Label>Filiallar</Label>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {branches.map((branch) => (
+                          <div key={branch.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`branch-${branch.id}`}
+                              checked={newProduct.filials.includes(branch.id)}
+                              onCheckedChange={() => handleBranchToggle(branch.id)}
+                            />
+                            <Label htmlFor={`branch-${branch.id}`} className="text-sm">
+                              {branch.name}
+                            </Label>
+                          </div>
+                        ))}
                       </div>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              )}
+                    </div>
+
+                    <div className="flex justify-end space-x-2">
+                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                        Bekor qilish
+                      </Button>
+                      <Button type="submit" disabled={isAddingProduct}>
+                        {isAddingProduct ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Qo'shilmoqda...
+                          </>
+                        ) : (
+                          "Qo'shish"
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </div>
@@ -544,12 +506,6 @@ export default function ProductsPage() {
           {success && (
             <Alert className="mb-6">
               <AlertDescription>{success}</AlertDescription>
-            </Alert>
-          )}
-
-          {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
@@ -565,7 +521,7 @@ export default function ProductsPage() {
             </div>
             {searchQuery && (
               <p className="text-sm text-muted-foreground mt-2">
-                {filteredProducts.length} ta mahsulot topildi "{searchQuery}" so'rovi bo'yicha
+                {filteredProducts.length??0} ta mahsulot topildi "{searchQuery}" so'rovi bo'yicha
               </p>
             )}
           </div>
@@ -586,55 +542,34 @@ export default function ProductsPage() {
                         </CardDescription>
                       </div>
                     </div>
-                    {user?.is_admin && (
-                      <div className="relative dropdown-container">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleDropdown(product.id)}
-                          className="p-1 hover:bg-accent"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                        {activeDropdown === product.id && (
-                          <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-md shadow-lg z-50">
-                            <div className="py-1">
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start text-left h-auto py-2 px-4 text-sm hover:bg-accent hover:text-accent-foreground"
-                                onClick={() => openEditDialog(product)}
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Tahrirlash
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start text-left h-auto py-2 px-4 text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                                onClick={() => openDeleteDialog(product)}
-                                disabled={isDeletingProduct && deletingProduct?.id === product.id}
-                              >
-                                {isDeletingProduct && deletingProduct?.id === product.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                )}
-                                O'chirish
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => openEditDialog(product)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => openDeleteDialog(product)}
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Filiallar:</span>
-                      {/* <Badge variant="outline">{product.filials.length} ta</Badge> */}
+                      {/* <Badge variant="outline">{product.filials.length??0} ta</Badge> */}
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {product.filial_names?.map((filialName, index) => (
+                      {product.filial_names?.slice(0, 2).map((filialName, index) => (
                         <Badge key={index} variant="secondary" className="text-xs">
                           {filialName}
                         </Badge>
@@ -645,13 +580,9 @@ export default function ProductsPage() {
                             <Badge key={filialId} variant="secondary" className="text-xs">
                               {branch?.name || `ID: ${filialId}`}
                             </Badge>
-                          )
+                          ) 
+
                         })}
-                      {/* {product.filials.length > 2 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{product.filials.length - 2}
-                        </Badge>
-                      )} */}
                     </div>
                   </div>
                 </CardContent>
@@ -680,12 +611,10 @@ export default function ProductsPage() {
                       Hozircha hech qanday mahsulot qo'shilmagan. Yangi mahsulot qo'shish uchun yuqoridagi tugmani
                       bosing.
                     </p>
-                    {user?.is_admin && (
-                      <Button onClick={() => setDialogOpen(true)}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Birinchi mahsulotni qo'shish
-                      </Button>
-                    )}
+                    <Button onClick={() => setDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Birinchi mahsulotni qo'shish
+                    </Button>
                   </>
                 )}
               </CardContent>

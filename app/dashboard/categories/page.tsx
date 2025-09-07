@@ -18,7 +18,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -80,6 +79,7 @@ export default function CategoriesPage() {
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isDeletingCategory, setIsDeletingCategory] = useState(false)
+  const [activeDropdown, setActiveDropdown] = useState<number | null>(null)
   const router = useRouter()
 
   const navigation = [
@@ -104,8 +104,24 @@ export default function CategoriesPage() {
     fetchCategories()
   }, [router])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeDropdown !== null) {
+        const target = event.target as Element
+        if (!target.closest('.dropdown-container')) {
+          setActiveDropdown(null)
+        }
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [activeDropdown])
+
   const fetchCategories = async () => {
     try {
+      setLoading(true)
       const response = await apiCall(API_ENDPOINTS.categories)
 
       if (response.ok) {
@@ -114,6 +130,7 @@ export default function CategoriesPage() {
       }
     } catch (error) {
       console.error("Categories fetch error:", error)
+      setError("Kategoriyalarni yuklashda xatolik yuz berdi")
     } finally {
       setLoading(false)
     }
@@ -172,6 +189,7 @@ export default function CategoriesPage() {
         setEditDialogOpen(false)
         setEditingCategory(null)
         setEditCategoryName("")
+        setActiveDropdown(null)
       } else {
         setError(data.message || "Xatolik yuz berdi")
       }
@@ -200,6 +218,7 @@ export default function CategoriesPage() {
         setSuccess("Kategoriya muvaffaqiyatli o'chirildi")
         setDeleteDialogOpen(false)
         setDeletingCategory(null)
+        setActiveDropdown(null)
       } else {
         setError(data.message || "Xatolik yuz berdi")
       }
@@ -214,11 +233,17 @@ export default function CategoriesPage() {
     setEditingCategory(category)
     setEditCategoryName(category.name)
     setEditDialogOpen(true)
+    setActiveDropdown(null)
   }
 
   const openDeleteDialog = (category: Category) => {
     setDeletingCategory(category)
     setDeleteDialogOpen(true)
+    setActiveDropdown(null)
+  }
+
+  const toggleDropdown = (categoryId: number) => {
+    setActiveDropdown(activeDropdown === categoryId ? null : categoryId)
   }
 
   const handleLogout = () => {
@@ -373,6 +398,12 @@ export default function CategoriesPage() {
             </Alert>
           )}
 
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {categories.map((category) => (
               <Card key={category.id} className="hover:shadow-md transition-shadow">
@@ -388,23 +419,40 @@ export default function CategoriesPage() {
                       </div>
                     </div>
                     {user?.is_admin && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditDialog(category)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Tahrirlash
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openDeleteDialog(category)} className="text-destructive">
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            O'chirish
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="relative dropdown-container">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => toggleDropdown(category.id)}
+                          className="p-1 hover:bg-accent"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                        
+                        {/* Custom Dropdown Menu */}
+                        {activeDropdown === category.id && (
+                          <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-md shadow-lg z-50">
+                            <div className="py-1">
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start text-left h-auto py-2 px-4 text-sm hover:bg-accent hover:text-accent-foreground"
+                                onClick={() => openEditDialog(category)}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Tahrirlash
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start text-left h-auto py-2 px-4 text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                                onClick={() => openDeleteDialog(category)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                O'chirish
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </CardHeader>
