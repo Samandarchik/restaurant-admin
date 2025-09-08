@@ -184,21 +184,26 @@ export default function OrdersPage() {
   const isInDateRange = (orderDate: Date, filterType: string) => {
     const today = new Date()
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999)
+    
+    // Order sanasini kun boshiga o'tkazish
+    const orderStart = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate())
     
     switch (filterType) {
       case "today":
-        const orderStart = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate())
         return orderStart.getTime() === todayStart.getTime()
       
       case "week":
         const weekAgo = new Date(todayStart)
         weekAgo.setDate(weekAgo.getDate() - 7)
-        return orderDate >= weekAgo && orderDate <= today
+        // So'nggi 7 kun ichidagi barcha buyurtmalar
+        return orderStart >= weekAgo && orderStart <= todayStart
       
       case "month":
         const monthAgo = new Date(todayStart)
-        monthAgo.setMonth(monthAgo.getMonth() - 1)
-        return orderDate >= monthAgo && orderDate <= today
+        monthAgo.setDate(monthAgo.getDate() - 30) // 30 kun oldin
+        // So'nggi 30 kun ichidagi barcha buyurtmalar
+        return orderStart >= monthAgo && orderStart <= todayStart
       
       default:
         return true
@@ -596,10 +601,7 @@ export default function OrdersPage() {
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <p className="text-lg font-bold">{order.total.toLocaleString()} so'm</p>
-                        <p className="text-sm text-muted-foreground">{order.items.length} ta mahsulot</p>
-                      </div>
+                    
                       {getStatusBadge(order.status)}
                     </div>
                   </div>
@@ -615,7 +617,6 @@ export default function OrdersPage() {
                             <Badge variant="outline" className="text-xs">
                               {item.count}x
                             </Badge>
-                            <span className="text-sm font-medium">{item.subtotal.toLocaleString()} so'm</span>
                           </div>
                         </div>
                       ))}
