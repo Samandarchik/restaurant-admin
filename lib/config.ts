@@ -1,3 +1,5 @@
+import { register } from "module"
+
 // Backend configuration
 export const API_BASE_URL = "https://api.uz-dev-ai.uz"
 
